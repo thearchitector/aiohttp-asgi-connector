@@ -26,7 +26,7 @@ To use the `ASGIApplicationConnector`:
 
 ```py
 import asyncio
-from typing import Annotated
+from typing import Annotated  # or from typing_extensions
 
 from aiohttp_asgi_connector import ASGIApplicationConnector
 from aiohttp import ClientSession
