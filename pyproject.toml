@@ -1,6 +1,6 @@
 [project]
 name = "aiohttp-asgi-connector"
-version = "0.1.0"
+version = "1.0.0"
 description = "AIOHTTP Connector for running ASGI applications"
 authors = [
     {name = "thearchitector", email = "me@eliasfgabriel.com"},
@@ -9,6 +9,7 @@ dependencies = [
     "aiohttp>=3",
 ]
 requires-python = ">=3.8"
+keywords = ["fastapi", "aiohttp", "asgi", "testing", "starlette", "httpx", "asyncio"]
 readme = "README.md"
 license = {text = "BSD-3-Clause"}
 
