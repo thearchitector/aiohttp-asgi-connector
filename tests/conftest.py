@@ -1,10 +1,9 @@
-from typing import Annotated
-
 import pytest
 from aiohttp import ClientSession
 from fastapi import Body, FastAPI
 from fastapi.responses import JSONResponse
 from pytest_asyncio import is_async_test
+from typing_extensions import Annotated
 
 from aiohttp_asgi_connector import ASGIApplicationConnector
 
