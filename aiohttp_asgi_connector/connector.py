@@ -6,6 +6,7 @@ from .transport import ASGITransport
 
 if TYPE_CHECKING:  # pragma: no cover
     from asyncio import AbstractEventLoop
+    from typing import List, Optional
 
     from aiohttp import ClientRequest, ClientTimeout
     from aiohttp.client_proto import ResponseHandler
@@ -34,7 +35,7 @@ class ASGIApplicationConnector(BaseConnector):
         application: "Application",
         root_path: str = "",
         raise_app_exceptions: bool = True,
-        loop: "AbstractEventLoop | None" = None,
+        loop: "Optional[AbstractEventLoop]" = None,
     ) -> None:
         super().__init__(loop=loop)
         self.app = application
@@ -42,7 +43,7 @@ class ASGIApplicationConnector(BaseConnector):
         self.raise_app_exceptions = raise_app_exceptions
 
     async def _create_connection(
-        self, req: "ClientRequest", traces: "list[Trace]", timeout: "ClientTimeout"
+        self, req: "ClientRequest", traces: "List[Trace]", timeout: "ClientTimeout"
     ) -> "ResponseHandler":
         protocol = self._factory()
         transport = ASGITransport(

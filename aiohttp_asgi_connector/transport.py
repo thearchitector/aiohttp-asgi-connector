@@ -6,21 +6,31 @@ from aiohttp import Payload
 
 if TYPE_CHECKING:  # pragma: no cover
     from asyncio import Task
-    from typing import Any, Awaitable, Callable, MutableMapping
+    from typing import (
+        Any,
+        Awaitable,
+        Callable,
+        Dict,
+        Iterator,
+        List,
+        MutableMapping,
+        Optional,
+        Tuple,
+    )
 
     from aiohttp import ClientRequest
     from aiohttp.client_proto import ResponseHandler
 
     Application = Callable[
         [
-            dict[str, Any],
-            Callable[[], Awaitable[dict[str, Any]]],
+            Dict[str, Any],
+            Callable[[], Awaitable[Dict[str, Any]]],
             Callable[[MutableMapping[str, Any]], Awaitable[None]],
         ],
         Awaitable[None],
     ]
 
-STATUS_CODE_TO_REASON: dict[int, str] = {
+STATUS_CODE_TO_REASON: "Dict[int, str]" = {
     200: "OK",
     201: "Created",
     202: "Accepted",
@@ -54,12 +64,12 @@ class ASGITransport(Transport):
 
         self.request = request
         self.request_size = -1
-        self.request_handler: "Task[None] | None" = None
+        self.request_handler: "Optional[Task[None]]" = None
 
         self._closing = False
 
     async def _handle_request(self) -> None:
-        scope = {
+        scope: "Dict[str, Any]" = {
             "type": "http",
             "asgi": {"version": "3.0"},
             "http_version": "1.1",
@@ -89,12 +99,12 @@ class ASGITransport(Transport):
         else:
             payload.write(self.request.body)
 
-        request_body_chunks = iter([payload.getvalue()])
-        status_code: int | None = None
-        response_headers: list[tuple[bytes, bytes]] | None = None
-        response_body = bytearray()
+        request_body_chunks: "Iterator[bytes]" = iter([payload.getvalue()])
+        status_code: "Optional[int]" = None
+        response_headers: "Optional[List[Tuple[bytes, bytes]]]" = None
+        response_body: bytearray = bytearray()
 
-        async def receive() -> dict[str, "Any"]:
+        async def receive() -> "Dict[str, Any]":
             try:
                 body = next(request_body_chunks)
             except StopIteration:
@@ -129,7 +139,7 @@ class ASGITransport(Transport):
         self.protocol.data_received(response_payload)
 
     def _encode_response(
-        self, status: int, headers: list[tuple[bytes, bytes]], body: bytearray
+        self, status: int, headers: "List[Tuple[bytes, bytes]]", body: bytearray
     ) -> bytes:
         status_line = (
             f"HTTP/1.1 {status} {STATUS_CODE_TO_REASON.get(status, 'Unknown')}"
