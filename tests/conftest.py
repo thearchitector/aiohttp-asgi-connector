@@ -6,7 +6,7 @@ from fastapi import Body, FastAPI
 from fastapi.responses import JSONResponse
 from pytest_asyncio import is_async_test
 
-from aiohttp_asgi_connector.connector import ASGIApplicationConnector
+from aiohttp_asgi_connector import ASGIApplicationConnector
 
 
 def pytest_collection_modifyitems(items):
