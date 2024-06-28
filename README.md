@@ -1,4 +1,4 @@
-# aiohttp-asgi
+# aiohttp-asgi-connector
 
 ![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/thearchitector/aiohttp-asgi-connector/CI.yaml?label=tests&style=flat-square)
 ![PyPI - Downloads](https://img.shields.io/pypi/dw/aiohttp-asgi-connector?style=flat-square)
@@ -47,6 +47,8 @@ async def main():
 
 asyncio.run(main())
 ```
+
+Exceptions raised within the ASGI application that are not handled by the application, like `HTTPException` in FastAPI for example, are propagated.
 
 This library does not handle ASGI lifespan events. If you want to run those events, use this library in conjunction with something like [asgi-lifespan](https://pypi.org/project/asgi-lifespan/).
 

@@ -54,13 +54,11 @@ class ASGITransport(Transport):
         app: "Application",
         request: "ClientRequest",
         root_path: str,
-        raise_app_exceptions: bool,
     ):
         super().__init__()
         self.protocol = protocol
         self.app = app
         self.root_path = root_path
-        self.raise_app_exceptions = raise_app_exceptions
 
         self.request = request
         self.request_size = -1
@@ -100,8 +98,8 @@ class ASGITransport(Transport):
             payload.write(self.request.body)
 
         request_body_chunks: "Iterator[bytes]" = iter([payload.getvalue()])
-        status_code: "Optional[int]" = None
-        response_headers: "Optional[List[Tuple[bytes, bytes]]]" = None
+        status_code: int = 500
+        response_headers: "List[Tuple[bytes, bytes]]" = []
         response_body: bytearray = bytearray()
 
         async def receive() -> "Dict[str, Any]":
@@ -124,14 +122,8 @@ class ASGITransport(Transport):
 
         try:
             await self.app(scope, receive, send)
-        except Exception:
-            if self.raise_app_exceptions:
-                raise
-
-        if status_code is None:
-            status_code = 500
-        if response_headers is None:
-            response_headers = []
+        except Exception as e:
+            self.protocol.set_exception(e)
 
         response_payload = self._encode_response(
             status_code, response_headers, response_body
@@ -169,7 +161,8 @@ class ASGITransport(Transport):
 
     def close(self) -> None:
         self._closing = True
-        del self.request_handler
+        if self.request_handler:
+            self.request_handler.cancel()
 
     def is_closing(self) -> bool:
         return self._closing

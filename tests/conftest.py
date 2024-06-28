@@ -1,6 +1,6 @@
 import pytest
 from aiohttp import ClientSession
-from fastapi import Body, FastAPI
+from fastapi import Body, FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from pytest_asyncio import is_async_test
 from typing_extensions import Annotated
@@ -26,6 +26,13 @@ async def pong():
 @app.post("/post_ping")
 async def post_ping(message: Annotated[str, Body(embed=True)]):
     return {"broadcast": message}
+
+
+@app.get("/fail")
+async def fail(handle: bool):
+    if handle:
+        raise HTTPException(status_code=500, detail="something bad happened")
+    raise Exception("something bad happened")
 
 
 @pytest.fixture(scope="session")

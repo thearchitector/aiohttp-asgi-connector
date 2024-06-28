@@ -24,31 +24,28 @@ class ASGIApplicationConnector(BaseConnector):
     Since requests are handled by the ASGI application directly, there is no concept of
     connection pooling with this connector; every request is processed immediately.
 
-    @param 'root_path' [""]:  alters the root path of the constructed ASGI request
-        scope.
-    @param 'raise_app_exceptions' [True]:  will cause the transport to propagate any
-        exceptions produced and not handled by the ASGI application.
+    Exceptions raised within the ASGI application that are not handled by the ASGI
+    application are reraised, since translating an error into a HTTP payload is not
+    generalizable across all expectations.
+
+    @param 'root_path' [""]: alters the root path of the constructed ASGI request scope.
     """
 
     def __init__(
         self,
         application: "Application",
         root_path: str = "",
-        raise_app_exceptions: bool = True,
         loop: "Optional[AbstractEventLoop]" = None,
     ) -> None:
         super().__init__(loop=loop)
         self.app = application
         self.root_path = root_path
-        self.raise_app_exceptions = raise_app_exceptions
 
     async def _create_connection(
         self, req: "ClientRequest", traces: "List[Trace]", timeout: "ClientTimeout"
     ) -> "ResponseHandler":
         protocol = self._factory()
-        transport = ASGITransport(
-            protocol, self.app, req, self.root_path, self.raise_app_exceptions
-        )
+        transport = ASGITransport(protocol, self.app, req, self.root_path)
         protocol.connection_made(transport)
         return protocol
 
