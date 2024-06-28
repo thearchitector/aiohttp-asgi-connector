@@ -1,8 +1,5 @@
 from asyncio import Transport
-from io import BytesIO
 from typing import TYPE_CHECKING
-
-from aiohttp import Payload
 
 if TYPE_CHECKING:  # pragma: no cover
     from asyncio import Task
@@ -62,6 +59,7 @@ class ASGITransport(Transport):
 
         self.request = request
         self.request_size = -1
+        self.request_body: "List[bytes]" = []
         self.request_handler: "Optional[Task[None]]" = None
 
         self._closing = False
@@ -82,22 +80,7 @@ class ASGITransport(Transport):
             "root_path": self.root_path,
         }
 
-        payload = BytesIO()
-
-        if isinstance(self.request.body, Payload):
-
-            class FalseWriter:
-                async def write(self, chunk: bytes) -> None:
-                    payload.write(chunk)
-
-            await self.request.body.write(FalseWriter())  # type: ignore
-        elif isinstance(self.request.body, tuple):
-            for chunk in self.request.body:
-                payload.write(chunk)
-        else:
-            payload.write(self.request.body)
-
-        request_body_chunks: "Iterator[bytes]" = iter([payload.getvalue()])
+        request_body_chunks: "Iterator[bytes]" = iter(self.request_body)
         status_code: int = 500
         response_headers: "List[Tuple[bytes, bytes]]" = []
         response_body: bytearray = bytearray()
@@ -151,6 +134,7 @@ class ASGITransport(Transport):
                 self.max_request_size = len(self.request.body)
         else:
             self.request_size += len(data)
+            self.request_body.append(data)
 
         if self.request_size == self.max_request_size:
             # we've hit EOF. schedule the request for processing. we have to save this
