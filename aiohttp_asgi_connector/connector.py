@@ -28,15 +28,15 @@ async def _write_bytes_dispatch(
 
     if writer.chunked:
         warnings.warn(
-            "Chunking direct ASGI requests has no effect. To avoid confusion, it"
-            " is recommended disable it.",
+            "Chunking direct ASGI requests has no effect. To avoid confusion,"
+            " disabling it is recommended.",
             stacklevel=0,
         )
 
     if writer._compress:
         warnings.warn(
-            "Compressing direct ASGI requests has no effect. To avoid confusion,"
-            "it is recommended disable it.",
+            "Compressing direct ASGI requests has no effect.  To avoid confusion,"
+            " disabling it is recommended.",
             stacklevel=0,
         )
 
