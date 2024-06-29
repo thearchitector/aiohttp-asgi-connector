@@ -1,4 +1,5 @@
 from asyncio import Transport
+from http import HTTPStatus
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -27,21 +28,7 @@ if TYPE_CHECKING:  # pragma: no cover
         Awaitable[None],
     ]
 
-STATUS_CODE_TO_REASON: "Dict[int, str]" = {
-    200: "OK",
-    201: "Created",
-    202: "Accepted",
-    204: "No Content",
-    301: "Moved Permanently",
-    302: "Found",
-    400: "Bad Request",
-    401: "Unauthorized",
-    403: "Forbidden",
-    404: "Not Found",
-    500: "Internal Server Error",
-    502: "Bad Gateway",
-    503: "Service Unavailable",
-}
+STATUS_CODE_TO_REASON: "Dict[int, str]" = {hs.value: hs.phrase for hs in HTTPStatus}
 
 
 class ASGITransport(Transport):
@@ -81,7 +68,7 @@ class ASGITransport(Transport):
         }
 
         request_body_chunks: "Iterator[bytes]" = iter(self.request_body)
-        status_code: int = 500
+        status_code: int = HTTPStatus.INTERNAL_SERVER_ERROR.value
         response_headers: "List[Tuple[bytes, bytes]]" = []
         response_body: bytearray = bytearray()
 
@@ -116,9 +103,7 @@ class ASGITransport(Transport):
     def _encode_response(
         self, status: int, headers: "List[Tuple[bytes, bytes]]", body: bytearray
     ) -> bytes:
-        status_line = (
-            f"HTTP/1.1 {status} {STATUS_CODE_TO_REASON.get(status, 'Unknown')}"
-        )
+        status_line = f"HTTP/1.1 {status} {STATUS_CODE_TO_REASON[status]}"
         header_line = "\r\n".join(
             f"{name.decode()}: {value.decode()}" for name, value in headers
         )
