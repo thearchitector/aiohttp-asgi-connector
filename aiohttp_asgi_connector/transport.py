@@ -1,9 +1,11 @@
 from asyncio import Transport
 from http import HTTPStatus
+from io import BytesIO
 from typing import TYPE_CHECKING
 
+from aiohttp import Payload
+
 if TYPE_CHECKING:  # pragma: no cover
-    from asyncio import Task
     from typing import (
         Any,
         Awaitable,
@@ -12,7 +14,6 @@ if TYPE_CHECKING:  # pragma: no cover
         Iterator,
         List,
         MutableMapping,
-        Optional,
         Tuple,
     )
 
@@ -43,31 +44,45 @@ class ASGITransport(Transport):
         self.protocol = protocol
         self.app = app
         self.root_path = root_path
-
         self.request = request
-        self.request_size = -1
-        self.request_body: "List[bytes]" = []
-        self.request_handler: "Optional[Task[None]]" = None
+        self._closing: bool = False
 
-        self._closing = False
-
-    async def _handle_request(self) -> None:
+    async def handle_request(self) -> None:
         scope: "Dict[str, Any]" = {
             "type": "http",
             "asgi": {"version": "3.0"},
             "http_version": "1.1",
             "method": self.request.method,
-            "headers": [(k.lower(), v) for (k, v) in self.request.headers.items()],
+            "headers": [
+                (k.lower().encode(), v.encode())
+                for k, v in self.request.headers.items()
+            ],
             "scheme": self.request.url.scheme,
             "path": self.request.url.path,
-            "raw_path": self.request.url.raw_path.split("?")[0],
-            "query_string": self.request.url.query,
+            "raw_path": self.request.url.raw_path.split("?")[0].encode(),
+            "query_string": self.request.url.raw_query_string.encode(),
             "server": (self.request.url.host, self.request.url.port),
             "client": ("127.0.0.1", 123),
             "root_path": self.root_path,
         }
 
-        request_body_chunks: "Iterator[bytes]" = iter(self.request_body)
+        payload = BytesIO()
+
+        if isinstance(self.request.body, Payload):
+
+            class FalseWriter:
+                async def write(self, chunk: bytes) -> None:
+                    payload.write(chunk)
+
+            await self.request.body.write(FalseWriter())  # type: ignore
+        elif isinstance(self.request.body, tuple):
+            for chunk in self.request.body:
+                payload.write(chunk)
+        else:
+            payload.write(self.request.body)
+
+        request_body_chunks: "Iterator[bytes]" = iter([payload.getvalue()])
+
         status_code: int = HTTPStatus.INTERNAL_SERVER_ERROR.value
         response_headers: "List[Tuple[bytes, bytes]]" = []
         response_body: bytearray = bytearray()
@@ -111,27 +126,12 @@ class ASGITransport(Transport):
         return response.encode()
 
     def write(self, data: bytes) -> None:
-        if self.request_size == -1:
-            self.request_size = 0
-            if size := getattr(self.request.body, "size", None):
-                self.max_request_size = size
-            else:
-                self.max_request_size = len(self.request.body)
-        else:
-            self.request_size += len(data)
-            self.request_body.append(data)
-
-        if self.request_size == self.max_request_size:
-            # we've hit EOF. schedule the request for processing. we have to save this
-            # to a task since the event loop only holds weak refs and we don't want to
-            # GC in the middle of an execution
-            task = self.protocol._loop.create_task(self._handle_request())
-            self.request_handler = task
+        # we don't care about the data as it was serialized by aiohttp; we don't want to
+        # have to dechunk or decompress data in order to pass it to the ASGI application
+        pass
 
     def close(self) -> None:
         self._closing = True
-        if self.request_handler:
-            self.request_handler.cancel()
 
     def is_closing(self) -> bool:
         return self._closing

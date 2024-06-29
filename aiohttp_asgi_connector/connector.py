@@ -1,6 +1,9 @@
-from typing import TYPE_CHECKING
+import warnings
+from asyncio import create_task
+from typing import TYPE_CHECKING, cast
 
-from aiohttp import BaseConnector
+from aiohttp import BaseConnector, ClientRequest
+from aiohttp.http import StreamWriter
 
 from .transport import ASGITransport
 
@@ -8,12 +11,44 @@ if TYPE_CHECKING:  # pragma: no cover
     from asyncio import AbstractEventLoop
     from typing import List, Optional
 
-    from aiohttp import ClientRequest, ClientTimeout
+    from aiohttp import ClientTimeout
+    from aiohttp.abc import AbstractStreamWriter
     from aiohttp.client_proto import ResponseHandler
     from aiohttp.client_reqrep import ConnectionKey
+    from aiohttp.connector import Connection
     from aiohttp.tracing import Trace
 
     from .transport import Application
+
+
+async def _write_bytes_dispatch(
+    req: "ClientRequest", writer: "AbstractStreamWriter", conn: "Connection"
+) -> None:
+    writer = cast("StreamWriter", writer)
+
+    if writer.chunked:
+        warnings.warn(
+            "Chunking direct ASGI requests has no effect. To avoid confusion, it"
+            " is recommended disable it.",
+            stacklevel=0,
+        )
+
+    if writer._compress:
+        warnings.warn(
+            "Compressing direct ASGI requests has no effect. To avoid confusion,"
+            "it is recommended disable it.",
+            stacklevel=0,
+        )
+
+    # we've hit EOF. schedule the request for processing. we have to save this
+    # to a task since the event loop only holds weak refs and we don't want to
+    # GC in the middle of an execution
+    protocol = cast("ResponseHandler", conn.protocol)
+    transport = cast(ASGITransport, protocol.transport)
+    task = create_task(transport.handle_request())
+    req._request_handler = task  # type: ignore[attr-defined]
+
+    return await ClientRequest.write_bytes(req, writer, conn)
 
 
 class ASGIApplicationConnector(BaseConnector):
@@ -44,8 +79,9 @@ class ASGIApplicationConnector(BaseConnector):
     async def _create_connection(
         self, req: "ClientRequest", traces: "List[Trace]", timeout: "ClientTimeout"
     ) -> "ResponseHandler":
-        protocol = self._factory()
+        protocol: "ResponseHandler" = self._factory()
         transport = ASGITransport(protocol, self.app, req, self.root_path)
+        req.write_bytes = _write_bytes_dispatch.__get__(req)  # type: ignore[method-assign]
         protocol.connection_made(transport)
         return protocol
 

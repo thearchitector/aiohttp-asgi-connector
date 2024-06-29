@@ -12,7 +12,7 @@ repos:
       - id: mypy
         name: mypy
         language: system
-        entry: .venv/bin/python -m mypy
+        entry: .venv/Scripts/python.exe -m mypy
         types: [python]
         exclude: ^tests
         require_serial: true

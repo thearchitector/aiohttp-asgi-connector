@@ -1,6 +1,6 @@
 import pytest
 from aiohttp import ClientSession
-from fastapi import Body, FastAPI, HTTPException
+from fastapi import Body, FastAPI, Form, HTTPException
 from fastapi.responses import JSONResponse
 from pytest_asyncio import is_async_test
 from typing_extensions import Annotated
@@ -18,13 +18,18 @@ def pytest_collection_modifyitems(items):
 app = FastAPI(default_response_class=JSONResponse)
 
 
-@app.get("/ping")
-async def pong():
+@app.get("/get")
+async def get():
     return True
 
 
-@app.post("/post_ping")
-async def post_ping(message: Annotated[str, Body(embed=True)]):
+@app.post("/post_json")
+async def post_json(message: Annotated[str, Body(embed=True)]):
+    return {"broadcast": message}
+
+
+@app.post("/post_form")
+async def post_form(message: Annotated[str, Form()]):
     return {"broadcast": message}
 
 
@@ -36,8 +41,13 @@ async def fail(handle: bool):
 
 
 @pytest.fixture(scope="session")
-async def asgi_connector():
-    return ASGIApplicationConnector(app)
+def application():
+    return app
+
+
+@pytest.fixture(scope="session")
+async def asgi_connector(application):
+    return ASGIApplicationConnector(application)
 
 
 @pytest.fixture(scope="session")

@@ -21,6 +21,7 @@ dev = [
     "pytest-asyncio>=0.23.7",
     "mypy>=1.10.1",
     "typing-extensions>=4.12.2",
+    "python-multipart>=0.0.9",
 ]
 
 [tool.pytest.ini_options]
