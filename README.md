@@ -4,7 +4,7 @@
 ![PyPI - Downloads](https://img.shields.io/pypi/dw/aiohttp-asgi-connector?style=flat-square)
 ![GitHub](https://img.shields.io/github/license/thearchitector/aiohttp-asgi-connector?style=flat-square)
 
-AIOHTTP Connector for running ASGI applications.
+An AIOHTTP `ClientSession` connector for interacting with ASGI applications.
 
 This library intends to increase the parity between AIOHTTP and HTTPX, specifically with HTTPX's `AsyncClient`. It is primarily intended to be used in test suite scenarios, or other situations where one would want to interface with an ASGI application directly instead of through a web server.
 
@@ -20,7 +20,7 @@ $ python -m pip install --user aiohttp-asgi-connector
 
 ## Usage
 
-This library replaces the entire connection stack and pool underlying HTTP transport. AIOHTTP exposes custom connectors via the `connector` argument supplied when creating a `ClientSession` instance.
+This library replaces the entire connection stack and underlying HTTP transport. AIOHTTP exposes custom connectors via the `connector` argument supplied when creating a `ClientSession` instance.
 
 To use the `ASGIApplicationConnector`:
 
@@ -48,9 +48,20 @@ async def main():
 asyncio.run(main())
 ```
 
-Exceptions raised within the ASGI application that are not handled by the application, like `HTTPException` in FastAPI for example, are propagated.
+Exceptions raised within the ASGI application that are not handled by middleware are propagated.
 
-This library does not handle ASGI lifespan events. If you want to run those events, use this library in conjunction with something like [asgi-lifespan](https://pypi.org/project/asgi-lifespan/).
+Since no HTTP packets are actually sent, request chunking and compression have no effect when used.
+
+This library does not handle ASGI lifespan events. If you want to run those events, use this library in conjunction with something like [asgi-lifespan](https://pypi.org/project/asgi-lifespan/):
+
+```py
+from asgi_lifespan import LifespanManager
+
+async with LifespanManager(app) as manager:
+    connector = ASGIApplicationConnector(manager.app)
+    async with ClientSession(base_url="http://localhost", connector=connector) as session:
+        ...
+```
 
 ## License
 
