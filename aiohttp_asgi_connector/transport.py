@@ -1,4 +1,4 @@
-from asyncio import Transport
+from asyncio import Event, Transport
 from http import HTTPStatus
 from io import BytesIO
 from typing import TYPE_CHECKING
@@ -82,15 +82,21 @@ class ASGITransport(Transport):
             payload.write(self.request.body)
 
         request_body_chunks: "Iterator[bytes]" = iter([payload.getvalue()])
+        request_received: Event = Event()
 
         status_code: int = HTTPStatus.INTERNAL_SERVER_ERROR.value
         response_headers: "List[Tuple[bytes, bytes]]" = []
         response_body: bytearray = bytearray()
+        response_sent: Event = Event()
 
         async def receive() -> "Dict[str, Any]":
+            if request_received.is_set():
+                await response_sent.wait()
+                return {"type": "http.disconnect"}
             try:
                 body = next(request_body_chunks)
             except StopIteration:
+                request_received.set()
                 return {"type": "http.request", "body": b"", "more_body": False}
             return {"type": "http.request", "body": body, "more_body": True}
 
@@ -104,6 +110,9 @@ class ASGITransport(Transport):
                 body = message.get("body", b"")
                 if body and self.request.method != "HEAD":
                     response_body.extend(body)
+                more_body = message.get("more_body", False)
+                if not more_body:
+                    response_sent.set()
 
         try:
             await self.app(scope, receive, send)
