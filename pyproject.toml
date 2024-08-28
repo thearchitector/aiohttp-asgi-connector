@@ -1,6 +1,6 @@
 [project]
 name = "aiohttp-asgi-connector"
-version = "1.0.2"
+version = "1.0.3"
 description = "AIOHTTP Connector for running ASGI applications"
 authors = [
     {name = "thearchitector", email = "me@eliasfgabriel.com"},
