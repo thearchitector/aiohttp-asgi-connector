@@ -1,7 +1,7 @@
 import pytest
 from aiohttp import ClientSession
 from fastapi import Body, FastAPI, Form, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pytest_asyncio import is_async_test
 from typing_extensions import Annotated
 
@@ -38,6 +38,14 @@ async def fail(handle: bool):
     if handle:
         raise HTTPException(status_code=500, detail="something bad happened")
     raise Exception("something bad happened")
+
+
+@app.get("/stream")
+async def stream():
+    def gen():
+        yield "{"
+        yield "}"
+    return StreamingResponse(gen(), media_type="application/json")
 
 
 @pytest.fixture(scope="session")

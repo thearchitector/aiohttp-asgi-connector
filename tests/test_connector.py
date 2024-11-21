@@ -1,5 +1,5 @@
 import pytest
-from aiohttp import ClientSession
+from aiohttp import ClientSession, ClientTimeout
 
 from aiohttp_asgi_connector import ASGIApplicationConnector
 
@@ -52,3 +52,8 @@ async def test_disconnect_after_response_sent():
             data=b"hello world",
         ) as resp:
             assert resp.status == 204
+
+
+async def test_app_stream(session):
+    async with session.get("/stream", timeout=ClientTimeout(total=3)) as resp:
+        assert await resp.json() == {}
