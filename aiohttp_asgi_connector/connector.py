@@ -1,6 +1,6 @@
 import warnings
 from asyncio import create_task
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from aiohttp import BaseConnector, ClientRequest
 from aiohttp.http import StreamWriter
@@ -14,7 +14,6 @@ if TYPE_CHECKING:  # pragma: no cover
     from aiohttp import ClientTimeout
     from aiohttp.abc import AbstractStreamWriter
     from aiohttp.client_proto import ResponseHandler
-    from aiohttp.client_reqrep import ConnectionKey
     from aiohttp.connector import Connection
     from aiohttp.tracing import Trace
 
@@ -85,8 +84,8 @@ class ASGIApplicationConnector(BaseConnector):
         protocol.connection_made(transport)
         return protocol
 
-    def _available_connections(self, key: "ConnectionKey") -> int:
+    def _available_connections(self, *args: "Any", **kwargs: "Any") -> int:
         return 1
 
-    def _get(self, key: "ConnectionKey") -> None:
+    async def _get(self, *args: "Any", **kwargs: "Any") -> None:
         return None
