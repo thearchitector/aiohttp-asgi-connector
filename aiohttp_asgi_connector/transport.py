@@ -127,6 +127,14 @@ class ASGITransport(Transport):
     def _encode_response(
         self, status: int, headers: "List[Tuple[bytes, bytes]]", body: bytearray
     ) -> bytes:
+        # add content-length if not present, which happens with streamed responses
+        found = False
+        for (name, value) in headers:
+            if name.lower() == b"content-length":
+                found = True
+        if not found:
+            headers.append((b"content-length", str(len(body)).encode()))
+
         status_line = f"HTTP/1.1 {status} {STATUS_CODE_TO_REASON[status]}"
         header_line = "\r\n".join(
             f"{name.decode()}: {value.decode()}" for name, value in headers
