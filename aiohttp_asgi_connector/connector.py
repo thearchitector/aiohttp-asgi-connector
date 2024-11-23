@@ -9,14 +9,11 @@ from .transport import ASGITransport
 
 if TYPE_CHECKING:  # pragma: no cover
     from asyncio import AbstractEventLoop
-    from typing import List, Optional
+    from typing import Any, Optional
 
-    from aiohttp import ClientTimeout
     from aiohttp.abc import AbstractStreamWriter
     from aiohttp.client_proto import ResponseHandler
-    from aiohttp.client_reqrep import ConnectionKey
     from aiohttp.connector import Connection
-    from aiohttp.tracing import Trace
 
     from .transport import Application
 
@@ -72,21 +69,15 @@ class ASGIApplicationConnector(BaseConnector):
         root_path: str = "",
         loop: "Optional[AbstractEventLoop]" = None,
     ) -> None:
-        super().__init__(loop=loop)
+        super().__init__(loop=loop, force_close=True)
         self.app = application
         self.root_path = root_path
 
     async def _create_connection(
-        self, req: "ClientRequest", traces: "List[Trace]", timeout: "ClientTimeout"
+        self, req: "ClientRequest", *args: "Any", **kwargs: "Any"
     ) -> "ResponseHandler":
         protocol: "ResponseHandler" = self._factory()
         transport = ASGITransport(protocol, self.app, req, self.root_path)
         req.write_bytes = _write_bytes_dispatch.__get__(req)  # type: ignore[method-assign]
         protocol.connection_made(transport)
         return protocol
-
-    def _available_connections(self, key: "ConnectionKey") -> int:
-        return 1
-
-    def _get(self, key: "ConnectionKey") -> None:
-        return None

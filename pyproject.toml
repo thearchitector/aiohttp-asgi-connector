@@ -1,6 +1,6 @@
 [project]
 name = "aiohttp-asgi-connector"
-version = "1.0.3"
+version = "1.0.4"
 description = "AIOHTTP Connector for running ASGI applications"
 authors = [
     {name = "thearchitector", email = "me@eliasfgabriel.com"},
@@ -28,6 +28,7 @@ dev = [
 addopts = "-ra -vv"
 testpaths = [ "tests" ]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
 
 [tool.mypy]
 strict = true
