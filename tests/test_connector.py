@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 from aiohttp import ClientSession
 
@@ -16,6 +18,19 @@ async def test_get(session):
 
 async def test_post_json(session):
     async with session.post("/post_json", json={"message": "hello world"}) as resp:
+        assert (await resp.json()) == {"broadcast": "hello world"}
+
+
+@pytest.mark.xfail(reason="Missing Chunked Transfer-Encoding support")
+async def test_post_stream(session):
+    async def stream():
+        yield b'{"message": '
+        await asyncio.sleep(0)
+        yield b'"hello world"}'
+
+    async with session.post(
+        "/post_json", data=stream(), headers={"Content-Type": "application/json"}
+    ) as resp:
         assert (await resp.json()) == {"broadcast": "hello world"}
 
 
@@ -52,3 +67,8 @@ async def test_disconnect_after_response_sent():
             data=b"hello world",
         ) as resp:
             assert resp.status == 204
+
+
+# async def test_app_stream(session):
+#     async with session.get("/stream", timeout=ClientTimeout(total=3)) as resp:
+#         assert await resp.json() == {}

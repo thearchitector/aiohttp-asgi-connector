@@ -1,9 +1,6 @@
 from asyncio import Event, Transport
 from http import HTTPStatus
-from io import BytesIO
 from typing import TYPE_CHECKING
-
-from aiohttp import Payload
 
 if TYPE_CHECKING:  # pragma: no cover
     from typing import (
@@ -45,6 +42,7 @@ class ASGITransport(Transport):
         self.app = app
         self.root_path = root_path
         self.request = request
+        self._request_body_buffer: "List[bytes]" = []
         self._closing: bool = False
 
     async def handle_request(self) -> None:
@@ -66,22 +64,7 @@ class ASGITransport(Transport):
             "root_path": self.root_path,
         }
 
-        payload = BytesIO()
-
-        if isinstance(self.request.body, Payload):
-
-            class FalseWriter:
-                async def write(self, chunk: bytes) -> None:
-                    payload.write(chunk)
-
-            await self.request.body.write(FalseWriter())  # type: ignore
-        elif isinstance(self.request.body, tuple):
-            for chunk in self.request.body:
-                payload.write(chunk)
-        else:
-            payload.write(self.request.body)
-
-        request_body_chunks: "Iterator[bytes]" = iter([payload.getvalue()])
+        request_body_chunks: "Iterator[bytes]" = iter(self._request_body_buffer[1:])
         request_received: Event = Event()
 
         status_code: int = HTTPStatus.INTERNAL_SERVER_ERROR.value
@@ -93,11 +76,13 @@ class ASGITransport(Transport):
             if request_received.is_set():
                 await response_sent.wait()
                 return {"type": "http.disconnect"}
+
             try:
                 body = next(request_body_chunks)
             except StopIteration:
                 request_received.set()
                 return {"type": "http.request", "body": b"", "more_body": False}
+
             return {"type": "http.request", "body": body, "more_body": True}
 
         async def send(message: "MutableMapping[str, Any]") -> None:
@@ -110,6 +95,7 @@ class ASGITransport(Transport):
                 body = message.get("body", b"")
                 if body and self.request.method != "HEAD":
                     response_body.extend(body)
+
                 more_body = message.get("more_body", False)
                 if not more_body:
                     response_sent.set()
@@ -135,9 +121,7 @@ class ASGITransport(Transport):
         return response.encode()
 
     def write(self, data: bytes) -> None:
-        # we don't care about the data as it was serialized by aiohttp; we don't want to
-        # have to dechunk or decompress data in order to pass it to the ASGI application
-        pass
+        self._request_body_buffer.append(data)
 
     def close(self) -> None:
         self._closing = True

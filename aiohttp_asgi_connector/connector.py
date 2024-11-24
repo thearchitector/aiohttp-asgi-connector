@@ -1,4 +1,3 @@
-import warnings
 from asyncio import create_task
 from typing import TYPE_CHECKING, cast
 
@@ -23,27 +22,20 @@ async def _write_bytes_dispatch(
 ) -> None:
     writer = cast("StreamWriter", writer)
 
-    if writer.chunked:
-        warnings.warn(
-            "Chunking direct ASGI requests has no effect. To avoid confusion,"
-            " disabling it is recommended.",
-            stacklevel=0,
-        )
+    async def _write_eof(self: "StreamWriter") -> None:
+        await StreamWriter.write_eof(self)
 
-    if writer._compress:
-        warnings.warn(
-            "Compressing direct ASGI requests has no effect.  To avoid confusion,"
-            " disabling it is recommended.",
-            stacklevel=0,
-        )
+        # we've hit EOF. schedule the request for processing. we have to save this
+        # to a task since the event loop only holds weak refs and we don't want to
+        # GC in the middle of an execution
+        protocol = cast("ResponseHandler", conn.protocol)
+        transport = cast(ASGITransport, protocol.transport)
+        task = create_task(transport.handle_request())
+        req._request_handler = task  # type: ignore[attr-defined]
 
-    # we've hit EOF. schedule the request for processing. we have to save this
-    # to a task since the event loop only holds weak refs and we don't want to
-    # GC in the middle of an execution
-    protocol = cast("ResponseHandler", conn.protocol)
-    transport = cast(ASGITransport, protocol.transport)
-    task = create_task(transport.handle_request())
-    req._request_handler = task  # type: ignore[attr-defined]
+        return None
+
+    writer.write_eof = _write_eof.__get__(writer)  # type: ignore[method-assign]
 
     return await ClientRequest.write_bytes(req, writer, conn)
 
