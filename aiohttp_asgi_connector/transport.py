@@ -69,7 +69,7 @@ class ASGITransport(Transport):
 
         status_code: int = HTTPStatus.INTERNAL_SERVER_ERROR.value
         response_headers: "List[Tuple[bytes, bytes]]" = []
-        response_body: bytearray = bytearray()
+        response_body: "List[bytes]" = []
         response_sent: Event = Event()
 
         async def receive() -> "Dict[str, Any]":
@@ -94,7 +94,7 @@ class ASGITransport(Transport):
             elif message["type"] == "http.response.body":
                 body = message.get("body", b"")
                 if body and self.request.method != "HEAD":
-                    response_body.extend(body)
+                    response_body.append(body)
 
                 more_body = message.get("more_body", False)
                 if not more_body:
@@ -108,17 +108,37 @@ class ASGITransport(Transport):
         response_payload = self._encode_response(
             status_code, response_headers, response_body
         )
-        self.protocol.data_received(response_payload)
+
+        for packet in response_payload:
+            self.protocol.data_received(packet)
 
     def _encode_response(
-        self, status: int, headers: "List[Tuple[bytes, bytes]]", body: bytearray
-    ) -> bytes:
+        self, status: int, headers: "List[Tuple[bytes, bytes]]", body: "List[bytes]"
+    ) -> "Iterator[bytes]":
+        is_chunked = False
+
+        # if there is no content length, we're streaming back a response in chunks
+        if not any(b"content-length" in h.lower() for h, _ in headers):
+            headers.append((b"Transfer-Encoding", b"chunked"))
+            is_chunked = True
+
         status_line = f"HTTP/1.1 {status} {STATUS_CODE_TO_REASON[status]}"
         header_line = "\r\n".join(
             f"{name.decode()}: {value.decode()}" for name, value in headers
         )
-        response = f"{status_line}\r\n{header_line}\r\n\r\n{body.decode()}"
-        return response.encode()
+
+        yield f"{status_line}\r\n{header_line}\r\n\r\n".encode()
+
+        if is_chunked:
+            for chunk in body:
+                chunk_size = f"{len(chunk):X}\r\n"
+                yield chunk_size.encode()
+                yield chunk
+                yield b"\r\n"
+
+            yield b"0\r\n\r\n"
+        else:
+            yield b"".join(body)
 
     def write(self, data: bytes) -> None:
         self._request_body_buffer.append(data)
