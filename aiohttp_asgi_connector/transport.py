@@ -42,7 +42,7 @@ class ASGITransport(Transport):
         self.app = app
         self.root_path = root_path
         self.request = request
-        self._request_body_buffer: "List[bytes]" = []
+        self._request_buffer: "List[bytes]" = []
         self._closing: bool = False
 
     async def handle_request(self) -> None:
@@ -64,7 +64,7 @@ class ASGITransport(Transport):
             "root_path": self.root_path,
         }
 
-        request_body_chunks: "Iterator[bytes]" = iter(self._request_body_buffer[1:])
+        request_chunks: "Iterator[bytes]" = iter(self._request_buffer)
         request_received: Event = Event()
 
         status_code: int = HTTPStatus.INTERNAL_SERVER_ERROR.value
@@ -78,7 +78,7 @@ class ASGITransport(Transport):
                 return {"type": "http.disconnect"}
 
             try:
-                body = next(request_body_chunks)
+                body = next(request_chunks)
             except StopIteration:
                 request_received.set()
                 return {"type": "http.request", "body": b"", "more_body": False}
@@ -101,6 +101,8 @@ class ASGITransport(Transport):
                     response_sent.set()
 
         try:
+            # skip processing the HTTP message headers
+            next(request_chunks)
             await self.app(scope, receive, send)
         except Exception as e:
             self.protocol.set_exception(e)
@@ -115,12 +117,9 @@ class ASGITransport(Transport):
     def _encode_response(
         self, status: int, headers: "List[Tuple[bytes, bytes]]", body: "List[bytes]"
     ) -> "Iterator[bytes]":
-        is_chunked = False
-
         # if there is no content length, we're streaming back a response in chunks
-        if not any(b"content-length" in h.lower() for h, _ in headers):
+        if is_chunked := not any(b"content-length" in h.lower() for h, _ in headers):
             headers.append((b"Transfer-Encoding", b"chunked"))
-            is_chunked = True
 
         status_line = f"HTTP/1.1 {status} {STATUS_CODE_TO_REASON[status]}"
         header_line = "\r\n".join(
@@ -131,8 +130,7 @@ class ASGITransport(Transport):
 
         if is_chunked:
             for chunk in body:
-                chunk_size = f"{len(chunk):X}\r\n"
-                yield chunk_size.encode()
+                yield f"{len(chunk):X}\r\n".encode()
                 yield chunk
                 yield b"\r\n"
 
@@ -140,8 +138,8 @@ class ASGITransport(Transport):
         else:
             yield b"".join(body)
 
-    def write(self, data: bytes) -> None:
-        self._request_body_buffer.append(data)
+    def write(self, data: bytes) -> None:  # pyright: ignore
+        self._request_buffer.append(data)
 
     def close(self) -> None:
         self._closing = True
