@@ -50,7 +50,7 @@ asyncio.run(main())
 
 Exceptions raised within the ASGI application that are not handled by middleware are propagated.
 
-Since no HTTP packets are actually sent, request chunking and compression have no effect when used.
+This connector transmits the request to the ASGI application _exactly_ as it is serialized by AIOHTTP. If upload chunking or compression are enabled for your `ClientSession` requests, your ASGI application will need to be able to handle de-chunking and de-compressing; FastAPI / Starlette do not do this by default. Support to enable connector-side dechunking and decompressing may come as a future feature if a need is demonstrated for it (file an Issue).
 
 This library does not handle ASGI lifespan events. If you want to run those events, use this library in conjunction with something like [asgi-lifespan](https://pypi.org/project/asgi-lifespan/):
 

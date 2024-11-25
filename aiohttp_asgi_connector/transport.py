@@ -1,9 +1,6 @@
 from asyncio import Event, Transport
 from http import HTTPStatus
-from io import BytesIO
 from typing import TYPE_CHECKING
-
-from aiohttp import Payload
 
 if TYPE_CHECKING:  # pragma: no cover
     from typing import (
@@ -45,6 +42,7 @@ class ASGITransport(Transport):
         self.app = app
         self.root_path = root_path
         self.request = request
+        self._request_buffer: "List[bytes]" = []
         self._closing: bool = False
 
     async def handle_request(self) -> None:
@@ -66,38 +64,25 @@ class ASGITransport(Transport):
             "root_path": self.root_path,
         }
 
-        payload = BytesIO()
-
-        if isinstance(self.request.body, Payload):
-
-            class FalseWriter:
-                async def write(self, chunk: bytes) -> None:
-                    payload.write(chunk)
-
-            await self.request.body.write(FalseWriter())  # type: ignore
-        elif isinstance(self.request.body, tuple):
-            for chunk in self.request.body:
-                payload.write(chunk)
-        else:
-            payload.write(self.request.body)
-
-        request_body_chunks: "Iterator[bytes]" = iter([payload.getvalue()])
+        request_chunks: "Iterator[bytes]" = iter(self._request_buffer)
         request_received: Event = Event()
 
         status_code: int = HTTPStatus.INTERNAL_SERVER_ERROR.value
         response_headers: "List[Tuple[bytes, bytes]]" = []
-        response_body: bytearray = bytearray()
+        response_body: "List[bytes]" = []
         response_sent: Event = Event()
 
         async def receive() -> "Dict[str, Any]":
             if request_received.is_set():
                 await response_sent.wait()
                 return {"type": "http.disconnect"}
+
             try:
-                body = next(request_body_chunks)
+                body = next(request_chunks)
             except StopIteration:
                 request_received.set()
                 return {"type": "http.request", "body": b"", "more_body": False}
+
             return {"type": "http.request", "body": body, "more_body": True}
 
         async def send(message: "MutableMapping[str, Any]") -> None:
@@ -109,12 +94,15 @@ class ASGITransport(Transport):
             elif message["type"] == "http.response.body":
                 body = message.get("body", b"")
                 if body and self.request.method != "HEAD":
-                    response_body.extend(body)
+                    response_body.append(body)
+
                 more_body = message.get("more_body", False)
                 if not more_body:
                     response_sent.set()
 
         try:
+            # skip processing the HTTP message headers
+            next(request_chunks)
             await self.app(scope, receive, send)
         except Exception as e:
             self.protocol.set_exception(e)
@@ -122,22 +110,36 @@ class ASGITransport(Transport):
         response_payload = self._encode_response(
             status_code, response_headers, response_body
         )
-        self.protocol.data_received(response_payload)
+
+        for packet in response_payload:
+            self.protocol.data_received(packet)
 
     def _encode_response(
-        self, status: int, headers: "List[Tuple[bytes, bytes]]", body: bytearray
-    ) -> bytes:
+        self, status: int, headers: "List[Tuple[bytes, bytes]]", body: "List[bytes]"
+    ) -> "Iterator[bytes]":
+        # if there is no content length, we're streaming back a response in chunks
+        if is_chunked := not any(b"content-length" in h.lower() for h, _ in headers):
+            headers.append((b"Transfer-Encoding", b"chunked"))
+
         status_line = f"HTTP/1.1 {status} {STATUS_CODE_TO_REASON[status]}"
         header_line = "\r\n".join(
             f"{name.decode()}: {value.decode()}" for name, value in headers
         )
-        response = f"{status_line}\r\n{header_line}\r\n\r\n{body.decode()}"
-        return response.encode()
 
-    def write(self, data: bytes) -> None:
-        # we don't care about the data as it was serialized by aiohttp; we don't want to
-        # have to dechunk or decompress data in order to pass it to the ASGI application
-        pass
+        yield f"{status_line}\r\n{header_line}\r\n\r\n".encode()
+
+        if is_chunked:
+            for chunk in body:
+                yield f"{len(chunk):X}\r\n".encode()
+                yield chunk
+                yield b"\r\n"
+
+            yield b"0\r\n\r\n"
+        else:
+            yield b"".join(body)
+
+    def write(self, data: bytes) -> None:  # pyright: ignore
+        self._request_buffer.append(data)
 
     def close(self) -> None:
         self._closing = True
