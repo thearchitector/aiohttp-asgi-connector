@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from aiohttp import ClientSession, ClientTimeout
 
@@ -37,7 +39,9 @@ async def test_post_form(session):
 
 async def test_app_stream(session):
     async with session.get("/stream", timeout=ClientTimeout(total=3)) as resp:
-        assert await resp.json() == {}
+        content = [i async for i in resp.content.iter_any()]
+        assert json.loads(b"".join(content).decode())
+        assert len(content) == 4
 
 
 async def test_disconnect_after_response_sent():
