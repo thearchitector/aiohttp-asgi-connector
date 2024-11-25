@@ -69,6 +69,7 @@ class ASGITransport(Transport):
 
         is_chunked: bool = False
         response_payload_queue: "Queue[bytes]" = Queue()
+        response_body = bytearray()
         response_sent: Event = Event()
 
         async def receive() -> "Dict[str, Any]":
@@ -115,24 +116,20 @@ class ASGITransport(Transport):
                 if not more_body:
                     response_sent.set()
 
-        body = bytearray()
-
         async def stream_or_buffer_response() -> None:
             is_body: bool = False
 
             while not response_sent.is_set() or not response_payload_queue.empty():
                 try:
-                    packet = response_payload_queue.get_nowait()
+                    response_body.extend(response_payload_queue.get_nowait())
                 except QueueEmpty:
                     await sleep(0)  # yield to allow the response event to be set
                     continue
 
-                body.extend(packet)
-
                 # the first message are the http headers, so we know this flag will be
                 # accurate
                 if is_chunked:
-                    chunk = bytes(body)
+                    chunk = bytes(response_body)
 
                     if is_body:
                         await self.write_chunk(f"{len(chunk):X}\r\n".encode())
@@ -143,7 +140,7 @@ class ASGITransport(Transport):
                         await self.write_chunk(chunk)
                         is_body = True
 
-                    body.clear()
+                    response_body.clear()
 
         try:
             # skip processing the HTTP message headers
@@ -155,7 +152,7 @@ class ASGITransport(Transport):
             await gather(self.app(scope, receive, send), stream_or_buffer_response())
 
             # send the last chunk, or the entire payload if the request was not chunked
-            await self.write_chunk(b"0\r\n\r\n" if is_chunked else bytes(body))
+            await self.write_chunk(b"0\r\n\r\n" if is_chunked else bytes(response_body))
         except Exception as e:
             self.protocol.set_exception(e)
 
