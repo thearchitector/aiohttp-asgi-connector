@@ -1,12 +1,13 @@
 from asyncio import Event, Queue, QueueEmpty, Transport, gather, sleep
 from http import HTTPStatus
-from typing import TYPE_CHECKING, Coroutine
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # pragma: no cover
     from typing import (
         Any,
         Awaitable,
         Callable,
+        Coroutine,
         Dict,
         Iterator,
         List,
