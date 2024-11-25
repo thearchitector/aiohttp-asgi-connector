@@ -41,7 +41,8 @@ class ASGIApplicationConnector(BaseConnector):
     intercepts and runs the provided ASGI application.
 
     Since requests are handled by the ASGI application directly, there is no concept of
-    connection pooling with this connector; every request is processed immediately.
+    connection pooling with this connector; every request is processed immediately and
+    response chunks are streamed as they're produced.
 
     Exceptions raised within the ASGI application that are not handled by the ASGI
     application are reraised, since translating an error into a HTTP payload is not
