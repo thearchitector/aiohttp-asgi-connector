@@ -135,12 +135,12 @@ class ASGITransport(Transport):
                     chunk = bytes(body)
 
                     if is_body:
-                        self.protocol.data_received(f"{len(chunk):X}\r\n".encode())
-                        self.protocol.data_received(chunk)
-                        self.protocol.data_received(b"\r\n")
+                        await self.write_chunk(f"{len(chunk):X}\r\n".encode())
+                        await self.write_chunk(chunk)
+                        await self.write_chunk(b"\r\n")
                     else:
                         # do not chunk the HTTP headers
-                        self.protocol.data_received(chunk)
+                        await self.write_chunk(chunk)
                         is_body = True
 
                     body.clear()
@@ -155,9 +155,13 @@ class ASGITransport(Transport):
             await gather(self.app(scope, receive, send), stream_or_buffer_response())
 
             # send the last chunk, or the entire payload if the request was not chunked
-            self.protocol.data_received(b"0\r\n\r\n" if is_chunked else bytes(body))
+            await self.write_chunk(b"0\r\n\r\n" if is_chunked else bytes(body))
         except Exception as e:
             self.protocol.set_exception(e)
+
+    async def write_chunk(self, data: bytes) -> None:
+        self.protocol.data_received(data)
+        await sleep(0)  # yield to ensure the session processes the incoming chunks
 
     def write(self, data: bytes) -> None:  # pyright: ignore
         self._request_buffer.append(data)
