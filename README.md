@@ -1,8 +1,8 @@
 # aiohttp-asgi-connector
 
-![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/thearchitector/aiohttp-asgi-connector/CI.yaml?label=tests&style=flat-square)
-![PyPI - Downloads](https://img.shields.io/pypi/dw/aiohttp-asgi-connector?style=flat-square)
-![GitHub](https://img.shields.io/github/license/thearchitector/aiohttp-asgi-connector?style=flat-square)
+![GitHub Workflow Status](https://raster.shields.io/github/actions/workflow/status/thearchitector/aiohttp-asgi-connector/CI.yaml?label=tests&style=flat-square)
+![PyPI - Downloads](https://raster.shields.io/pypi/dm/aiohttp-asgi-connector?style=flat-square)
+![GitHub](https://raster.shields.io/github/license/thearchitector/aiohttp-asgi-connector?style=flat-square)
 
 An AIOHTTP `ClientSession` connector for interacting with ASGI applications.
 
