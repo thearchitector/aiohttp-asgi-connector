@@ -1,4 +1,3 @@
-from asyncio import create_task
 from typing import TYPE_CHECKING, cast
 
 from aiohttp import BaseConnector, ClientRequest
@@ -23,15 +22,11 @@ async def _write_bytes_dispatch(
     writer = cast("StreamWriter", writer)
 
     async def _write_eof(self: "StreamWriter") -> None:
-        await StreamWriter.write_eof(self)
-
-        # we've hit EOF. schedule the request for processing. we have to save this
-        # to a task since the event loop only holds weak refs and we don't want to
-        # GC in the middle of an execution
         protocol = cast("ResponseHandler", conn.protocol)
         transport = cast(ASGITransport, protocol.transport)
-        task = create_task(transport.handle_request())
-        req._request_handler = task  # type: ignore[attr-defined]
+
+        await StreamWriter.write_eof(self)
+        await transport.handle_request()
 
         return None
 

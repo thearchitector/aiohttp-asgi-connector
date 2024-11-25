@@ -42,7 +42,7 @@ async def fail(handle: bool):
 
 @app.get("/stream")
 async def stream():
-    return StreamingResponse((c for c in "{}"), media_type="application/json")
+    return StreamingResponse((c for c in "true"), media_type="application/json")
 
 
 @pytest.fixture(scope="session")

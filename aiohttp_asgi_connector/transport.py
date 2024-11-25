@@ -1,4 +1,4 @@
-from asyncio import Event, Transport
+from asyncio import Event, Queue, QueueEmpty, Transport, gather, sleep
 from http import HTTPStatus
 from typing import TYPE_CHECKING
 
@@ -7,11 +7,11 @@ if TYPE_CHECKING:  # pragma: no cover
         Any,
         Awaitable,
         Callable,
+        Coroutine,
         Dict,
         Iterator,
         List,
         MutableMapping,
-        Tuple,
     )
 
     from aiohttp import ClientRequest
@@ -23,7 +23,7 @@ if TYPE_CHECKING:  # pragma: no cover
             Callable[[], Awaitable[Dict[str, Any]]],
             Callable[[MutableMapping[str, Any]], Awaitable[None]],
         ],
-        Awaitable[None],
+        Coroutine[Any, Any, None],
     ]
 
 STATUS_CODE_TO_REASON: "Dict[int, str]" = {hs.value: hs.phrase for hs in HTTPStatus}
@@ -67,9 +67,9 @@ class ASGITransport(Transport):
         request_chunks: "Iterator[bytes]" = iter(self._request_buffer)
         request_received: Event = Event()
 
-        status_code: int = HTTPStatus.INTERNAL_SERVER_ERROR.value
-        response_headers: "List[Tuple[bytes, bytes]]" = []
-        response_body: "List[bytes]" = []
+        is_chunked: bool = False
+        response_payload_queue: "Queue[bytes]" = Queue()
+        response_body = bytearray()
         response_sent: Event = Event()
 
         async def receive() -> "Dict[str, Any]":
@@ -86,57 +86,79 @@ class ASGITransport(Transport):
             return {"type": "http.request", "body": body, "more_body": True}
 
         async def send(message: "MutableMapping[str, Any]") -> None:
-            nonlocal status_code, response_headers
+            nonlocal is_chunked
 
             if message["type"] == "http.response.start":
-                status_code = message["status"]
-                response_headers = message.get("headers", [])
+                status = message["status"]
+                headers = message.get("headers", [])
+
+                # if there is no content length, we're streaming back a response in
+                # chunks
+                if is_chunked := not any(
+                    b"content-length" in h.lower() for h, _ in headers
+                ):
+                    headers.append((b"Transfer-Encoding", b"chunked"))
+
+                status_line = f"HTTP/1.1 {status} {STATUS_CODE_TO_REASON[status]}"
+                header_line = "\r\n".join(
+                    f"{name.decode()}: {value.decode()}" for name, value in headers
+                )
+
+                await response_payload_queue.put(
+                    f"{status_line}\r\n{header_line}\r\n\r\n".encode()
+                )
             elif message["type"] == "http.response.body":
                 body = message.get("body", b"")
                 if body and self.request.method != "HEAD":
-                    response_body.append(body)
+                    await response_payload_queue.put(body)
 
                 more_body = message.get("more_body", False)
                 if not more_body:
                     response_sent.set()
 
+        async def stream_or_buffer_response() -> None:
+            is_body: bool = False
+
+            while not response_sent.is_set() or not response_payload_queue.empty():
+                try:
+                    response_body.extend(response_payload_queue.get_nowait())
+                except QueueEmpty:
+                    await sleep(0)  # yield to allow the response event to be set
+                    continue
+
+                # the first message are the http headers, so we know this flag will be
+                # accurate
+                if is_chunked:
+                    chunk = bytes(response_body)
+
+                    if is_body:
+                        await self.write_chunk(f"{len(chunk):X}\r\n".encode())
+                        await self.write_chunk(chunk)
+                        await self.write_chunk(b"\r\n")
+                    else:
+                        # do not chunk the HTTP headers
+                        await self.write_chunk(chunk)
+                        is_body = True
+
+                    response_body.clear()
+
         try:
             # skip processing the HTTP message headers
             next(request_chunks)
-            await self.app(scope, receive, send)
+
+            # process the request. if the response is chunked, each chunk is sent as it
+            # it processed. otherwise the chunks are buffered and sent once the response
+            # is complete
+            await gather(self.app(scope, receive, send), stream_or_buffer_response())
+
+            # send the last chunk, or the entire payload if the request was not chunked
+            await self.write_chunk(b"0\r\n\r\n" if is_chunked else bytes(response_body))
         except Exception as e:
             self.protocol.set_exception(e)
 
-        response_payload = self._encode_response(
-            status_code, response_headers, response_body
-        )
-
-        for packet in response_payload:
-            self.protocol.data_received(packet)
-
-    def _encode_response(
-        self, status: int, headers: "List[Tuple[bytes, bytes]]", body: "List[bytes]"
-    ) -> "Iterator[bytes]":
-        # if there is no content length, we're streaming back a response in chunks
-        if is_chunked := not any(b"content-length" in h.lower() for h, _ in headers):
-            headers.append((b"Transfer-Encoding", b"chunked"))
-
-        status_line = f"HTTP/1.1 {status} {STATUS_CODE_TO_REASON[status]}"
-        header_line = "\r\n".join(
-            f"{name.decode()}: {value.decode()}" for name, value in headers
-        )
-
-        yield f"{status_line}\r\n{header_line}\r\n\r\n".encode()
-
-        if is_chunked:
-            for chunk in body:
-                yield f"{len(chunk):X}\r\n".encode()
-                yield chunk
-                yield b"\r\n"
-
-            yield b"0\r\n\r\n"
-        else:
-            yield b"".join(body)
+    async def write_chunk(self, data: bytes) -> None:
+        self.protocol.data_received(data)
+        await sleep(0)  # yield to ensure the session processes the incoming chunks
 
     def write(self, data: bytes) -> None:  # pyright: ignore
         self._request_buffer.append(data)
