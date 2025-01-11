@@ -3,7 +3,11 @@ name = "aiohttp-asgi-connector"
 version = "1.1.1"
 description = "AIOHTTP Connector for running ASGI applications"
 authors = [{ name = "thearchitector", email = "me@eliasfgabriel.com" }]
-dependencies = ["aiohttp>=3.1.0"]
+requires-python = ">=3.8"
+dependencies = [
+    "aiohttp<3.11; python_version ~= '3.8'",
+    "aiohttp>=3.1.0; python_version >= '3.9'",
+]
 keywords = [
     "fastapi",
     "aiohttp",

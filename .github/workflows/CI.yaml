@@ -16,7 +16,8 @@ jobs:
         uses: pdm-project/setup-pdm@v3
         with:
           python-version: ${{ matrix.python-version }}
+          cache: true
       - name: Install dependencies
-        run: pdm install -G :all
+        run: pdm install -G :all --no-lock
       - name: Run tests
         run: pdm run pytest

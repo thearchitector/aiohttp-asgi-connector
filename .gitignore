@@ -7,4 +7,3 @@ __pycache__
 .pdm-python
 .pdm-build
 dist
-pdm.lock
