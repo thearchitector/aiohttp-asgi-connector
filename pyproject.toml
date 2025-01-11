@@ -1,20 +1,22 @@
 [project]
 name = "aiohttp-asgi-connector"
-version = "1.1.0"
+version = "1.1.1"
 description = "AIOHTTP Connector for running ASGI applications"
-authors = [
-    {name = "thearchitector", email = "me@eliasfgabriel.com"},
+authors = [{ name = "thearchitector", email = "me@eliasfgabriel.com" }]
+dependencies = ["aiohttp>=3.1.0"]
+keywords = [
+    "fastapi",
+    "aiohttp",
+    "asgi",
+    "testing",
+    "starlette",
+    "httpx",
+    "asyncio",
 ]
-dependencies = [
-    "aiohttp>=3",
-]
-requires-python = ">=3.8"
-keywords = ["fastapi", "aiohttp", "asgi", "testing", "starlette", "httpx", "asyncio"]
 readme = "README.md"
-license = {text = "BSD-3-Clause"}
+license = { text = "BSD-3-Clause" }
 
-[tool.pdm]
-[tool.pdm.dev-dependencies]
+[dependency-groups]
 dev = [
     "fastapi-slim>=0.111.0",
     "pytest>=8.2.2",
@@ -26,7 +28,7 @@ dev = [
 
 [tool.pytest.ini_options]
 addopts = "-ra -vv"
-testpaths = [ "tests" ]
+testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 
@@ -34,7 +36,7 @@ asyncio_default_fixture_loop_scope = "session"
 strict = true
 
 [tool.pyright]
-ignore = [ "tests" ]
+ignore = ["tests"]
 
 [tool.ruff]
 target-version = "py310"
