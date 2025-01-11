@@ -18,6 +18,6 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: true
       - name: Install dependencies
-        run: pdm install -G :all --no-lock
+        run: pdm install -G :all --frozen-lockfile
       - name: Run tests
         run: pdm run pytest
