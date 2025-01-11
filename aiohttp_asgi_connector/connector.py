@@ -1,7 +1,6 @@
 from typing import TYPE_CHECKING, cast
 
 from aiohttp import BaseConnector, ClientRequest
-from aiohttp.http import StreamWriter
 
 from .transport import ASGITransport
 
@@ -9,30 +8,21 @@ if TYPE_CHECKING:  # pragma: no cover
     from asyncio import AbstractEventLoop
     from typing import Any, Optional
 
-    from aiohttp.abc import AbstractStreamWriter
+    from aiohttp import ClientResponse
     from aiohttp.client_proto import ResponseHandler
     from aiohttp.connector import Connection
 
     from .transport import Application
 
 
-async def _write_bytes_dispatch(
-    req: "ClientRequest", writer: "AbstractStreamWriter", conn: "Connection"
-) -> None:
-    writer = cast("StreamWriter", writer)
+async def _send_dispatch(req: "ClientRequest", conn: "Connection") -> "ClientResponse":
+    response: "ClientResponse" = await type(req).send(req, conn)
 
-    async def _write_eof(self: "StreamWriter") -> None:
-        protocol = cast("ResponseHandler", conn.protocol)
-        transport = cast(ASGITransport, protocol.transport)
+    protocol = cast("ResponseHandler", conn.protocol)
+    transport = cast(ASGITransport, protocol.transport)
+    transport.schedule_handler()
 
-        await StreamWriter.write_eof(self)
-        await transport.handle_request()
-
-        return None
-
-    writer.write_eof = _write_eof.__get__(writer)  # type: ignore[method-assign]
-
-    return await ClientRequest.write_bytes(req, writer, conn)
+    return response
 
 
 class ASGIApplicationConnector(BaseConnector):
@@ -66,6 +56,6 @@ class ASGIApplicationConnector(BaseConnector):
     ) -> "ResponseHandler":
         protocol: "ResponseHandler" = self._factory()
         transport = ASGITransport(protocol, self.app, req, self.root_path)
-        req.write_bytes = _write_bytes_dispatch.__get__(req)  # type: ignore[method-assign]
+        req.send = _send_dispatch.__get__(req)  # type: ignore[method-assign]
         protocol.connection_made(transport)
         return protocol

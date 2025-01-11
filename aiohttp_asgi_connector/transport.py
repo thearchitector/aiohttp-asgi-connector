@@ -1,18 +1,11 @@
-from asyncio import Event, Queue, QueueEmpty, Transport, gather, sleep
+from asyncio import Event, Queue, QueueEmpty, Transport, create_task, gather, sleep
 from http import HTTPStatus
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # pragma: no cover
-    from typing import (
-        Any,
-        Awaitable,
-        Callable,
-        Coroutine,
-        Dict,
-        Iterator,
-        List,
-        MutableMapping,
-    )
+    from asyncio import Task
+    from collections.abc import Awaitable, Callable, Coroutine, Iterator, MutableMapping
+    from typing import Any, Dict, List, Optional
 
     from aiohttp import ClientRequest
     from aiohttp.client_proto import ResponseHandler
@@ -44,8 +37,15 @@ class ASGITransport(Transport):
         self.request = request
         self._request_buffer: "List[bytes]" = []
         self._closing: bool = False
+        self._handler: "Optional[Task[None]]" = None
 
-    async def handle_request(self) -> None:
+    def schedule_handler(self) -> None:
+        # rather than await the request directly, schedule it onto the event loop. this
+        # better mimics a third party remote, and somehow also ensures we process chunks
+        # properly
+        self._handler = create_task(self._handle_request())
+
+    async def _handle_request(self) -> None:
         scope: "Dict[str, Any]" = {
             "type": "http",
             "asgi": {"version": "3.0"},

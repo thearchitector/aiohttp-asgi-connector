@@ -8,7 +8,7 @@ An AIOHTTP `ClientSession` connector for interacting with ASGI applications.
 
 This library intends to increase the parity between AIOHTTP and HTTPX, specifically with HTTPX's `AsyncClient`. It is primarily intended to be used in test suite scenarios, or other situations where one would want to interface with an ASGI application directly instead of through a web server.
 
-Supports Python 3.8+ and AIOHTTP 3+.
+Supports AIOHTTP 3.1+ on corresponding compatible Python versions.
 
 ## Installation
 
