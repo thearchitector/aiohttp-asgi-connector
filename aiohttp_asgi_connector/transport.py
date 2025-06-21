@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, cast
 if TYPE_CHECKING:  # pragma: no cover
     from asyncio import Task
     from collections.abc import Awaitable, Callable, Coroutine, Iterator, MutableMapping
-    from typing import Any, Dict, List, Optional
+    from typing import Any, Dict, List, Optional, Union
 
     from aiohttp import ClientRequest
     from aiohttp.client_proto import ResponseHandler
@@ -161,7 +161,7 @@ class ASGITransport(Transport):
         self.protocol.data_received(data)
         await sleep(0)  # yield to ensure the session processes the incoming chunks
 
-    def write(self, data: bytes | bytearray | memoryview) -> None:
+    def write(self, data: "Union[bytes, bytearray, memoryview]") -> None:
         self._request_buffer.append(cast(bytes, data))
 
     def close(self) -> None:
