@@ -1,6 +1,6 @@
 from asyncio import Event, Queue, QueueEmpty, Transport, create_task, gather, sleep
 from http import HTTPStatus
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:  # pragma: no cover
     from asyncio import Task
@@ -64,7 +64,12 @@ class ASGITransport(Transport):
             "root_path": self.root_path,
         }
 
-        request_chunks: "Iterator[bytes]" = iter(self._request_buffer)
+        # skip processing the HTTP message headers, but keep coaleced chunks if they're
+        # in the buffer
+        coalesced_chunks = self._request_buffer.pop(0).split(b"\r\n\r\n")[1:]
+        request_chunks: "Iterator[bytes]" = iter(
+            coalesced_chunks + self._request_buffer
+        )
         request_received: Event = Event()
 
         is_chunked: bool = False
@@ -79,11 +84,10 @@ class ASGITransport(Transport):
 
             try:
                 body = next(request_chunks)
+                return {"type": "http.request", "body": body, "more_body": True}
             except StopIteration:
                 request_received.set()
                 return {"type": "http.request", "body": b"", "more_body": False}
-
-            return {"type": "http.request", "body": body, "more_body": True}
 
         async def send(message: "MutableMapping[str, Any]") -> None:
             nonlocal is_chunked
@@ -143,9 +147,6 @@ class ASGITransport(Transport):
                     response_body.clear()
 
         try:
-            # skip processing the HTTP message headers
-            next(request_chunks)
-
             # process the request. if the response is chunked, each chunk is sent as it
             # it processed. otherwise the chunks are buffered and sent once the response
             # is complete
@@ -160,8 +161,8 @@ class ASGITransport(Transport):
         self.protocol.data_received(data)
         await sleep(0)  # yield to ensure the session processes the incoming chunks
 
-    def write(self, data: bytes) -> None:  # pyright: ignore
-        self._request_buffer.append(data)
+    def write(self, data: bytes | bytearray | memoryview) -> None:
+        self._request_buffer.append(cast(bytes, data))
 
     def close(self) -> None:
         self._closing = True
