@@ -1,9 +1,9 @@
-__pycache__
-.pytest_cache
 .mypy_cache
+.pytest_cache
 .ruff_cache
-
 .venv
-.pdm-python
-.pdm-build
+
+__pycache__
+.coverage
+
 dist

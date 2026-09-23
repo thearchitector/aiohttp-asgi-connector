@@ -1,8 +1,8 @@
 # aiohttp-asgi-connector
 
-![GitHub Workflow Status](https://raster.shields.io/github/actions/workflow/status/thearchitector/aiohttp-asgi-connector/CI.yaml?label=tests&style=flat-square)
-![PyPI - Downloads](https://raster.shields.io/pypi/dm/aiohttp-asgi-connector?style=flat-square)
-![GitHub](https://raster.shields.io/github/license/thearchitector/aiohttp-asgi-connector?style=flat-square)
+![PyPI - Downloads](https://img.shields.io/pypi/dm/aiohttp-asgi-connector?style=flat)
+![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/thearchitector/aiohttp-asgi-connector/ci.yaml?label=tests&style=flat)
+![GitHub](https://img.shields.io/github/license/thearchitector/aiohttp-asgi-connector?style=flat)
 
 An AIOHTTP `ClientSession` connector for interacting with ASGI applications.
 
@@ -34,16 +34,21 @@ from fastapi import FastAPI, Body
 
 app = FastAPI()
 
+
 @app.post("/ping")
 async def pong(message: Annotated[str, Body(embed=True)]):
     return {"broadcast": f"Application says '{message}'!"}
 
+
 async def main():
     connector = ASGIApplicationConnector(app)
-    async with ClientSession(base_url="http://localhost", connector=connector) as session:
+    async with ClientSession(
+        base_url="http://localhost", connector=connector
+    ) as session:
         async with session.post("/ping", json={"message": "hello"}) as resp:
             print(await resp.json())
             # ==> {'broadcast': "Application says 'hello'!"}
+
 
 asyncio.run(main())
 ```
@@ -59,7 +64,9 @@ from asgi_lifespan import LifespanManager
 
 async with LifespanManager(app) as manager:
     connector = ASGIApplicationConnector(manager.app)
-    async with ClientSession(base_url="http://localhost", connector=connector) as session:
+    async with ClientSession(
+        base_url="http://localhost", connector=connector
+    ) as session:
         ...
 ```
 

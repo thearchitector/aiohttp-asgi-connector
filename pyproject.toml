@@ -1,8 +1,8 @@
 [project]
 name = "aiohttp-asgi-connector"
-version = "1.1.2"
+version = "1.1.3"
 description = "AIOHTTP Connector for running ASGI applications"
-authors = [{ name = "thearchitector", email = "me@eliasfgabriel.com" }]
+authors = [{ name = "Elias Gabriel", email = "oss@eliasfgabriel.com" }]
 requires-python = ">=3.8"
 dependencies = [
     "aiohttp>=3.1.0; python_version >= '3.9'",
@@ -22,19 +22,39 @@ license = { text = "BSD-3-Clause" }
 
 [dependency-groups]
 dev = [
-    "fastapi>=0.111.0",
-    "pytest>=8.2.2",
-    "pytest-asyncio>=0.23.7",
-    "mypy>=1.10.1",
-    "typing-extensions>=4.12.2",
-    "python-multipart>=0.0.9",
+    "fastapi",
+    "pytest",
+    "pytest-asyncio",
+    "pytest-cov",
+    "python-multipart",
+]
+local = [
+    "mypy",
+    "prek",
+    "typing-extensions",
 ]
 
 [tool.pytest.ini_options]
-addopts = "-ra -vv -p 'no:anyio'"
+addopts = "-ra -vv -p 'no:anyio' --cov aiohttp_asgi_connector --import-mode=importlib"
 testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
+
+[tool.ruff]
+unsafe-fixes = false
+
+[tool.ruff.lint]
+extend-select = ["ANN", "ASYNC", "PYI", "PT", "SIM", "TID", "PERF", "TRY", "PGH003"]
+extend-ignore = ["TID252", "TRY003", "TRY300"]
+preview = true
+
+[tool.ruff.lint.isort]
+split-on-trailing-comma = false
+
+[tool.ruff.format]
+docstring-code-format = true
+skip-magic-trailing-comma = true
+preview = true
 
 [tool.mypy]
 strict = true
@@ -42,9 +62,6 @@ strict = true
 [tool.pyright]
 ignore = ["tests"]
 
-[tool.ruff.lint]
-extend-select = ["B", "I", "ASYNC"]
-
 [build-system]
-requires = ["pdm-backend"]
-build-backend = "pdm.backend"
+requires = ["uv_build>=0.12.18,<0.13.0"]
+build-backend = "uv_build"
