@@ -62,7 +62,7 @@ unsafe-fixes = false
 
 [tool.ruff.lint]
 extend-select = ["ANN", "ASYNC", "PYI", "PT", "SIM", "TID", "PERF", "TRY", "PGH003"]
-extend-ignore = ["TID252", "TRY003", "TRY300"]
+extend-ignore = ["TID252", "TRY003", "TRY300", "FA100"]
 preview = true
 
 [tool.ruff.lint.isort]

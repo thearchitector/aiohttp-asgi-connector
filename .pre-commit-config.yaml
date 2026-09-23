@@ -14,7 +14,7 @@ repos:
             language: system
             entry: uv run mypy .
             types: [python]
-            exclude: ^tests
+            pass_filenames: false
             require_serial: true
     - repo: builtin
       hooks:
