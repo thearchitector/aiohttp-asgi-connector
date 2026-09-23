@@ -71,7 +71,7 @@ class ASGITransport(Transport):
         request_received: Event = Event()
 
         is_chunked: bool = False
-        response_payload_queue: Queue[bytes] = Queue[bytes]()
+        response_payload_queue: Queue[bytes] = Queue()
         response_body = bytearray()
         response_sent: Event = Event()
 
