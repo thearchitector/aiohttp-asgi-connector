@@ -32,13 +32,15 @@ class ASGIApplicationConnector(BaseConnector):
 
     Since requests are handled by the ASGI application directly, there is no concept of
     connection pooling with this connector; every request is processed immediately and
-    response chunks are streamed as they're produced.
-
-    Exceptions raised within the ASGI application that are not handled by the ASGI
-    application are reraised, since translating an error into a HTTP payload is not
-    generalizable across all expectations.
+    chunked responses are streamed as they're produced.
 
     @param 'root_path' [""]: alters the root path of the constructed ASGI request scope.
+    @param 'propagate_exceptions' [True]: Whether to propagate application exceptions through
+        to the client directly, or permit a parent ASGI application (FastAPI) to potentially
+        catch and return an HTTP exception instead. When True, this has the side-effect of
+        buffering all known-length responses before sending them to the client, including
+        streaming responses with an explicit Content-Length header. When set to False,
+        responses are streamed as they're produced as expected.
     """
 
     def __init__(
@@ -46,10 +48,13 @@ class ASGIApplicationConnector(BaseConnector):
         application: "Application",
         root_path: str = "",
         loop: "Optional[AbstractEventLoop]" = None,
+        *,
+        propagate_exceptions: bool = True,
     ) -> None:
         super().__init__(loop=loop, force_close=True)
         self.app = application
         self.root_path = root_path
+        self.propagate_exceptions = propagate_exceptions
 
     async def _create_connection(
         self,
@@ -58,7 +63,13 @@ class ASGIApplicationConnector(BaseConnector):
         **kwargs: "Any",  # noqa: ANN401
     ) -> "ResponseHandler":
         protocol: ResponseHandler = self._factory()
-        transport = ASGITransport(protocol, self.app, req, self.root_path)
+        transport = ASGITransport(
+            protocol,
+            self.app,
+            req,
+            self.root_path,
+            propagate_exceptions=self.propagate_exceptions,
+        )
         req.send = _send_dispatch.__get__(req)  # type: ignore[method-assign]
         protocol.connection_made(transport)
         return protocol

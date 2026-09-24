@@ -19,6 +19,15 @@ async def test_app_failure_propagate(session: ClientSession) -> None:
             assert await resp.json()
 
 
+async def test_app_failure_response_without_propagation(application: FastAPI) -> None:
+    async with ClientSession(
+        connector=ASGIApplicationConnector(application, propagate_exceptions=False),
+        base_url="http://localhost",
+    ) as session, session.get("/fail?handle=false") as resp:
+        assert resp.status == 500
+        assert await resp.text() == "Internal Server Error"
+
+
 async def test_bad_method(session: ClientSession) -> None:
     async with session.post("/get") as resp:
         assert (await resp.json()) == {"detail": "Method Not Allowed"}
