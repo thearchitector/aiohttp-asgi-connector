@@ -6,7 +6,7 @@ authors = [{ name = "Elias Gabriel", email = "oss@eliasfgabriel.com" }]
 readme = "README.md"
 license = "BSD-3-Clause-Clear"
 classifiers = [
-    "Development Status :: 6 - Production/Stable",
+    "Development Status :: 5 - Production/Stable",
     "Framework :: aiohttp",
     "Intended Audience :: Developers",
     "Natural Language :: English",
