@@ -4,7 +4,7 @@ from aiohttp import BaseConnector, ClientRequest
 
 from .transport import ASGITransport
 
-if TYPE_CHECKING:  # pragma: no cover
+if TYPE_CHECKING:
     from asyncio import AbstractEventLoop
     from typing import Any, Optional
 
@@ -16,7 +16,7 @@ if TYPE_CHECKING:  # pragma: no cover
 
 
 async def _send_dispatch(req: "ClientRequest", conn: "Connection") -> "ClientResponse":
-    response: "ClientResponse" = await type(req).send(req, conn)
+    response: ClientResponse = await type(req).send(req, conn)
 
     protocol = cast("ResponseHandler", conn.protocol)
     transport = cast(ASGITransport, protocol.transport)
@@ -52,9 +52,12 @@ class ASGIApplicationConnector(BaseConnector):
         self.root_path = root_path
 
     async def _create_connection(
-        self, req: "ClientRequest", *args: "Any", **kwargs: "Any"
+        self,
+        req: "ClientRequest",
+        *args: "Any",  # noqa: ANN401
+        **kwargs: "Any",  # noqa: ANN401
     ) -> "ResponseHandler":
-        protocol: "ResponseHandler" = self._factory()
+        protocol: ResponseHandler = self._factory()
         transport = ASGITransport(protocol, self.app, req, self.root_path)
         req.send = _send_dispatch.__get__(req)  # type: ignore[method-assign]
         protocol.connection_made(transport)

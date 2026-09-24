@@ -2,7 +2,7 @@ from asyncio import Event, Queue, QueueEmpty, Transport, create_task, gather, sl
 from http import HTTPStatus
 from typing import TYPE_CHECKING, cast
 
-if TYPE_CHECKING:  # pragma: no cover
+if TYPE_CHECKING:
     from asyncio import Task
     from collections.abc import Awaitable, Callable, Coroutine, Iterator, MutableMapping
     from typing import Any, Dict, List, Optional, Union
@@ -29,15 +29,15 @@ class ASGITransport(Transport):
         app: "Application",
         request: "ClientRequest",
         root_path: str,
-    ):
+    ) -> None:
         super().__init__()
         self.protocol = protocol
         self.app = app
         self.root_path = root_path
         self.request = request
-        self._request_buffer: "List[bytes]" = []
+        self._request_buffer: List[bytes] = []
         self._closing: bool = False
-        self._handler: "Optional[Task[None]]" = None
+        self._handler: Optional[Task[None]] = None
 
     def schedule_handler(self) -> None:
         # rather than await the request directly, schedule it onto the event loop. this
@@ -46,7 +46,7 @@ class ASGITransport(Transport):
         self._handler = create_task(self._handle_request())
 
     async def _handle_request(self) -> None:
-        scope: "Dict[str, Any]" = {
+        scope: Dict[str, Any] = {
             "type": "http",
             "asgi": {"version": "3.0"},
             "http_version": "1.1",
@@ -67,13 +67,11 @@ class ASGITransport(Transport):
         # skip processing the HTTP message headers, but keep coaleced chunks if they're
         # in the buffer
         coalesced_chunks = self._request_buffer.pop(0).split(b"\r\n\r\n")[1:]
-        request_chunks: "Iterator[bytes]" = iter(
-            coalesced_chunks + self._request_buffer
-        )
+        request_chunks: Iterator[bytes] = iter(coalesced_chunks + self._request_buffer)
         request_received: Event = Event()
 
         is_chunked: bool = False
-        response_payload_queue: "Queue[bytes]" = Queue()
+        response_payload_queue: Queue[bytes] = Queue()
         response_body = bytearray()
         response_sent: Event = Event()
 
@@ -154,7 +152,7 @@ class ASGITransport(Transport):
 
             # send the last chunk, or the entire payload if the request was not chunked
             await self.write_chunk(b"0\r\n\r\n" if is_chunked else bytes(response_body))
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - forward application errors to the client
             self.protocol.set_exception(e)
 
     async def write_chunk(self, data: bytes) -> None:
@@ -165,7 +163,12 @@ class ASGITransport(Transport):
         self._request_buffer.append(cast(bytes, data))
 
     def close(self) -> None:
+        if self._closing:
+            return
+
         self._closing = True
+        # delay closing the connection just as a precaution against triggering a premature EOF while aiohttp is still reading data
+        self.request.loop.call_soon(self.protocol.connection_lost, None)
 
     def is_closing(self) -> bool:
         return self._closing

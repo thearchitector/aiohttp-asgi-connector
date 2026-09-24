@@ -1,0 +1,29 @@
+name: CI
+
+on: [push]
+
+jobs:
+    test:
+        strategy:
+            fail-fast: false
+            matrix:
+                python-version:
+                    [3.8, 3.9, "3.10", "3.11", "3.12", "3.13", "3.14"]
+                os: [ubuntu-latest, macos-latest, windows-latest]
+        runs-on: ${{ matrix.os }}
+        steps:
+            - uses: actions/checkout@v7
+
+            - name: Install uv
+              uses: astral-sh/setup-uv@v9.0.0
+              with:
+                  enable-cache: true
+                  python-version: ${{ matrix.python-version }}
+
+            - name: Install dependencies
+              run: |
+                  uv sync --locked --group dev
+                  uv pip install pytest-github-actions-annotate-failures
+
+            - name: Run tests
+              run: uv run pytest
