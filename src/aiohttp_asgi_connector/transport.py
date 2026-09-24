@@ -1,4 +1,4 @@
-from asyncio import Event, Queue, QueueEmpty, Transport, create_task, gather, sleep
+from asyncio import Event, Queue, Transport, create_task, gather, sleep
 from http import HTTPStatus
 from typing import TYPE_CHECKING, cast
 
@@ -29,12 +29,15 @@ class ASGITransport(Transport):
         app: "Application",
         request: "ClientRequest",
         root_path: str,
+        *,
+        propagate_exceptions: bool = True,
     ) -> None:
         super().__init__()
         self.protocol = protocol
         self.app = app
         self.root_path = root_path
         self.request = request
+        self.propagate_exceptions = propagate_exceptions
         self._request_buffer: List[bytes] = []
         self._closing: bool = False
         self._handler: Optional[Task[None]] = None
@@ -64,14 +67,14 @@ class ASGITransport(Transport):
             "root_path": self.root_path,
         }
 
-        # skip processing the HTTP message headers, but keep coaleced chunks if they're
+        # skip processing the HTTP message headers, but keep coalesced chunks if they're
         # in the buffer
         coalesced_chunks = self._request_buffer.pop(0).split(b"\r\n\r\n")[1:]
         request_chunks: Iterator[bytes] = iter(coalesced_chunks + self._request_buffer)
         request_received: Event = Event()
 
         is_chunked: bool = False
-        response_payload_queue: Queue[bytes] = Queue()
+        response_payload_queue: Queue[Optional[bytes]] = Queue()
         response_body = bytearray()
         response_sent: Event = Event()
 
@@ -105,55 +108,65 @@ class ASGITransport(Transport):
                 header_line = "\r\n".join(
                     f"{name.decode()}: {value.decode()}" for name, value in headers
                 )
+                payload = f"{status_line}\r\n{header_line}\r\n\r\n".encode()
 
-                await response_payload_queue.put(
-                    f"{status_line}\r\n{header_line}\r\n\r\n".encode()
-                )
+                # if we're streaming, or we don't have to capture application exceptions,
+                # send the payload immediately
+                if is_chunked or not self.propagate_exceptions:
+                    response_payload_queue.put_nowait(payload)
+                else:
+                    response_body.extend(payload)
             elif message["type"] == "http.response.body":
                 body = message.get("body", b"")
                 if body and self.request.method != "HEAD":
-                    await response_payload_queue.put(body)
+                    if is_chunked:
+                        response_payload_queue.put_nowait(
+                            b"%X\r\n" % len(body) + body + b"\r\n"
+                        )
+                    elif not self.propagate_exceptions:
+                        response_payload_queue.put_nowait(body)
+                    else:
+                        response_body.extend(body)
 
                 more_body = message.get("more_body", False)
                 if not more_body:
                     response_sent.set()
+                    response_payload_queue.put_nowait(None)
 
-        async def stream_or_buffer_response() -> None:
-            is_body: bool = False
+        async def stream_response() -> None:
+            while True:
+                chunk = await response_payload_queue.get()
+                if chunk is None:
+                    break
 
-            while not response_sent.is_set() or not response_payload_queue.empty():
-                try:
-                    response_body.extend(response_payload_queue.get_nowait())
-                except QueueEmpty:
-                    await sleep(0)  # yield to allow the response event to be set
-                    continue
-
-                # the first message are the http headers, so we know this flag will be
-                # accurate
-                if is_chunked:
-                    chunk = bytes(response_body)
-
-                    if is_body:
-                        await self.write_chunk(f"{len(chunk):X}\r\n".encode())
-                        await self.write_chunk(chunk)
-                        await self.write_chunk(b"\r\n")
-                    else:
-                        # do not chunk the HTTP headers
-                        await self.write_chunk(chunk)
-                        is_body = True
-
-                    response_body.clear()
+                await self.write_chunk(chunk)
 
         try:
             # process the request. if the response is chunked, each chunk is sent as it
             # it processed. otherwise the chunks are buffered and sent once the response
-            # is complete
-            await gather(self.app(scope, receive, send), stream_or_buffer_response())
+            # is complete, unless exception propagation is disabled
+            await gather(self.app(scope, receive, send), stream_response())
 
-            # send the last chunk, or the entire payload if the request was not chunked
-            await self.write_chunk(b"0\r\n\r\n" if is_chunked else bytes(response_body))
+            # send the last chunk, or the entire payload if the request was not chunked.
+            # this is here mainly for simplicity; if `propagate_exceptions`, we have to wait
+            # until `app` returns finalizing the stream so that we can catch any exception
+            # and pass it through the protocol. if we didn't, we'd send the full response to
+            # the client before we could catch the exception, which would mean clients receiving
+            # HTTP 500s instead. the simplification here is ALSO waiting for chunked responses
+            # even if propagate is disabled; this defers stream finalization until the app is also
+            # done, which is unnecesary, but I opted for it in favor of sending the terminal chunk
+            # frame in only one place.
+            if is_chunked or self.propagate_exceptions:
+                await self.write_chunk(
+                    b"0\r\n\r\n" if is_chunked else bytes(response_body)
+                )
         except Exception as e:  # noqa: BLE001 - forward application errors to the client
             self.protocol.set_exception(e)
+            # ensure the streaming task is cleaned up
+            response_payload_queue.put_nowait(None)
+        finally:
+            # release the task to the GC
+            self._handler = None
 
     async def write_chunk(self, data: bytes) -> None:
         self.protocol.data_received(data)
